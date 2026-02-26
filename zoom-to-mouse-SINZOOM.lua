@@ -610,7 +610,14 @@ local function serialize_table(val, name, skipnewlines, depth)
     depth = depth or 0
 
     local tmp = string.rep(" ", depth)
-    if name then tmp = tmp .. name .. " = " end
+    if name then 
+        if type(name) == "number" then
+            tmp = tmp .. "[" .. name .. "] = " 
+        elseif type(name) == "string" then
+            -- Wrap string keys in brackets to support spaces and special characters
+            tmp = tmp .. "[\"" .. name .. "\"] = "
+        end
+    end
 
     if type(val) == "table" then
         tmp = tmp .. "{" .. (not skipnewlines and "\n" or "")
