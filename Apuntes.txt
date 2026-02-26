@@ -1,0 +1,13 @@
+Conversación con IA:
+
+
+Mensaje 1:
+
+Todo ello con movimiento suave y quiero tener un ajuste para controlar esto.
+Quiero tener un selector de fuente, para que el movimiento de transform position, sea a esa fuente.
+Quiero poder tener el control del zoom que se hace hacia el mouse. Como si fuera un zoom to mouse, pero mejorado.
+No quiero que modifiques nada del tamaño de la fuente, solo quiero que desplaces el transform position en X o en Y, quiero tener un ajuste con esto.
+Quiero poder activar esta funcion con una tecla, como si fuera un interruptor, es decir, que la misma tecla, active o desactive.
+
+Revisa todo bien, si tienes dudas me dices.
+No quiero fallos quiero que vaya muy bien.
