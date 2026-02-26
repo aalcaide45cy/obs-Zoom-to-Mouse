@@ -118,6 +118,148 @@ local function log(msg)
 end
 
 -- ============================================================================
+-- SISTEMA DE PRESETS
+-- ============================================================================
+local PRESETS_FILE = script_path() .. "zoom_presets.txt"
+local presets_data = {}
+
+-- Serialización simple de tabla a string
+local function serialize_table(val, name, skipnewlines, depth)
+    skipnewlines = skipnewlines or false
+    depth = depth or 0
+    local tmp = string.rep(" ", depth)
+    if name then tmp = tmp .. name .. " = " end
+    
+    if type(val) == "table" then
+        tmp = tmp .. "{" .. (not skipnewlines and "\n" or "")
+        for k, v in pairs(val) do
+            tmp = tmp .. serialize_table(v, k, skipnewlines, depth + 1) .. "," .. (not skipnewlines and "\n" or "")
+        end
+        tmp = tmp .. string.rep(" ", depth) .. "}"
+    elseif type(val) == "number" then
+        tmp = tmp .. tostring(val)
+    elseif type(val) == "string" then
+        tmp = tmp .. string.format("%q", val)
+    elseif type(val) == "boolean" then
+        tmp = tmp .. (val and "true" or "false")
+    else
+        tmp = tmp .. "\"[invalido]\""
+    end
+    return tmp
+end
+
+local function load_presets_from_file()
+    local f = io.open(PRESETS_FILE, "r")
+    if not f then return {} end
+    local content = f:read("*all")
+    f:close()
+    
+    if content and content ~= "" then
+        local chunk = loadstring("return " .. content)
+        if chunk then
+            local success, result = pcall(chunk)
+            if success and type(result) == "table" then
+                return result
+            end
+        end
+    end
+    return {}
+end
+
+local function save_presets_to_file()
+    local f = io.open(PRESETS_FILE, "w")
+    if f then
+        f:write(serialize_table(presets_data))
+        f:close()
+        log("Presets guardados en disco.")
+    else
+        log("Error: no se pudo guardar el archivo de presets.")
+    end
+end
+
+-- Cargar en memoria al iniciar
+presets_data = load_presets_from_file()
+
+local function save_current_as_preset(props, p, settings_data)
+    local preset_name = obs.obs_data_get_string(settings_data, "new_preset_name")
+    if not preset_name or preset_name == "" then
+        log("Error: Nombre de preset vacío.")
+        return false
+    end
+    
+    -- Clonar settings actuales
+    local preset = {}
+    for k, v in pairs(settings) do
+        -- No guardamos name ni debug
+        if k ~= "source_name" and k ~= "debug_enabled" then
+            preset[k] = v
+        end
+    end
+    
+    presets_data[preset_name] = preset
+    save_presets_to_file()
+    log("Preset '" .. preset_name .. "' guardado.")
+    
+    -- Limpiar caja de texto y actualizar UI
+    obs.obs_data_set_string(settings_data, "new_preset_name", "")
+    
+    -- Disparar un refresh falso para recargar la lista de presets
+    return true
+end
+
+local function load_selected_preset(props, p, settings_data)
+    local preset_name = obs.obs_data_get_string(settings_data, "selected_preset")
+    if not preset_name or preset_name == "" then return false end
+    
+    local preset = presets_data[preset_name]
+    if not preset then
+        log("Error: Preset '" .. preset_name .. "' no encontrado.")
+        return false
+    end
+    
+    -- Inyectar valores al settings_data (esto actualiza la UI de OBS de inmediato)
+    for k, v in pairs(preset) do
+        if type(v) == "number" then
+            obs.obs_data_set_double(settings_data, k, v)
+            obs.obs_data_set_int(settings_data, k, math.floor(v)) -- por si es entero
+        elseif type(v) == "string" then
+            obs.obs_data_set_string(settings_data, k, v)
+        elseif type(v) == "boolean" then
+            obs.obs_data_set_bool(settings_data, k, v)
+        end
+    end
+    
+    log("Preset '" .. preset_name .. "' cargado.")
+    return true
+end
+
+local function delete_selected_preset(props, p, settings_data)
+    local preset_name = obs.obs_data_get_string(settings_data, "selected_preset")
+    if not preset_name or preset_name == "" then return false end
+    
+    if presets_data[preset_name] then
+        presets_data[preset_name] = nil
+        save_presets_to_file()
+        log("Preset '" .. preset_name .. "' eliminado.")
+        obs.obs_data_set_string(settings_data, "selected_preset", "")
+    end
+    
+    return true
+end
+
+-- Refrescar la lista visual de presets en OBS
+local function refresh_presets_list(props, property)
+    local p_list = obs.obs_properties_get(props, "selected_preset")
+    if p_list then
+        obs.obs_property_list_clear(p_list)
+        obs.obs_property_list_add_string(p_list, "", "")
+        for k, v in pairs(presets_data) do
+            obs.obs_property_list_add_string(p_list, k, k)
+        end
+    end
+end
+
+-- ============================================================================
 -- OBTENER POSICIÓN DEL MOUSE
 -- ============================================================================
 
@@ -580,6 +722,28 @@ function script_properties()
 
     refresh_sources_list(props, source_list)
     
+    -- UI de PRESETS 
+    obs.obs_properties_add_text(props, "separator_presets", "--- PRESETS ---", obs.OBS_TEXT_INFO)
+    
+    obs.obs_properties_add_text(props, "new_preset_name", "Nombre del Nuevo Preset", obs.OBS_TEXT_DEFAULT)
+    local btn_save = obs.obs_properties_add_button(props, "btn_save_preset", "Guardar Preset Actual", save_current_as_preset)
+    
+    local preset_list = obs.obs_properties_add_list(props, "selected_preset", 
+        "Seleccionar Preset", 
+        obs.OBS_COMBO_TYPE_LIST, 
+        obs.OBS_COMBO_FORMAT_STRING)
+        
+    local btn_load = obs.obs_properties_add_button(props, "btn_load_preset", "Cargar Preset", load_selected_preset)
+    local btn_del = obs.obs_properties_add_button(props, "btn_delete_preset", "Eliminar Preset", delete_selected_preset)
+    
+    -- Llenar la lista
+    refresh_presets_list(props, preset_list)
+    
+    -- Un truco para refrescar la lista al guardar (OBS llama a modified_callback del botón si devuelve true, pero no es tan directo.
+    -- Así que lo enganchamos al text field también si es necesario, pero las funciones btn ya refrescan properties si devuelven true).
+    
+    obs.obs_properties_add_text(props, "separator_settings", "--- CONFIGURACIÓN ---", obs.OBS_TEXT_INFO)
+
     obs.obs_properties_add_int(props, "screen_width", "Ancho de pantalla", 640, 7680, 1)
     obs.obs_properties_add_int(props, "screen_height", "Alto de pantalla", 480, 4320, 1)
     
@@ -683,6 +847,9 @@ function script_defaults(settings_data)
     obs.obs_data_set_default_bool(settings_data, "use_manual_center", false)
     obs.obs_data_set_default_double(settings_data, "center_x", 0)
     obs.obs_data_set_default_double(settings_data, "center_y", 0)
+    
+    obs.obs_data_set_default_string(settings_data, "new_preset_name", "")
+    obs.obs_data_set_default_string(settings_data, "selected_preset", "")
 end
 
 function script_update(settings_data)
