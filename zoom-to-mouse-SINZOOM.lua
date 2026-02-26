@@ -598,6 +598,193 @@ local function animation_tick()
 end
 
 -- ============================================================================
+-- PRESETS SYSTEM
+-- ============================================================================
+
+local function get_preset_file_path()
+    return script_path() .. "zoom_presets.lua.txt"
+end
+
+local function serialize_table(val, name, skipnewlines, depth)
+    skipnewlines = skipnewlines or false
+    depth = depth or 0
+
+    local tmp = string.rep(" ", depth)
+    if name then tmp = tmp .. name .. " = " end
+
+    if type(val) == "table" then
+        tmp = tmp .. "{" .. (not skipnewlines and "\n" or "")
+        for k, v in pairs(val) do
+            tmp =  tmp .. serialize_table(v, k, skipnewlines, depth + 1) .. "," .. (not skipnewlines and "\n" or "")
+        end
+        tmp = tmp .. string.rep(" ", depth) .. "}"
+    elseif type(val) == "number" then
+        tmp = tmp .. tostring(val)
+    elseif type(val) == "string" then
+        tmp = tmp .. string.format("%q", val)
+    elseif type(val) == "boolean" then
+        tmp = tmp .. (val and "true" or "false")
+    else
+        tmp = tmp .. "\"[invalido]\""
+    end
+    return tmp
+end
+
+local function load_presets_from_file()
+    local f = io.open(get_preset_file_path(), "r")
+    if not f then return {} end
+    local content = f:read("*a")
+    f:close()
+    
+    local chunk = loadstring("return " .. content)
+    if chunk then
+        local success, result = pcall(chunk)
+        if success and type(result) == "table" then
+            return result
+        end
+    end
+    return {}
+end
+
+local function save_presets_to_file(presets)
+    local f = io.open(get_preset_file_path(), "w")
+    if f then
+        f:write(serialize_table(presets))
+        f:close()
+        return true
+    end
+    return false
+end
+
+local function get_current_settings_table()
+    return {
+        zone_mode = settings.zone_mode,
+        left_percent = settings.left_percent,
+        center_percent = settings.center_percent,
+        right_percent = settings.right_percent,
+        z5_left = settings.z5_left,
+        z5_lc = settings.z5_lc,
+        z5_center = settings.z5_center,
+        z5_rc = settings.z5_rc,
+        z5_right = settings.z5_right,
+        z7_left = settings.z7_left,
+        z7_lc1 = settings.z7_lc1,
+        z7_lc2 = settings.z7_lc2,
+        z7_center = settings.z7_center,
+        z7_rc1 = settings.z7_rc1,
+        z7_rc2 = settings.z7_rc2,
+        z7_right = settings.z7_right,
+        move_x = settings.move_x,
+        move_y = settings.move_y,
+        offset_x_left = settings.offset_x_left,
+        offset_x_right = settings.offset_x_right,
+        offset_y_up = settings.offset_y_up,
+        offset_y_down = settings.offset_y_down,
+        transition_speed = settings.transition_speed,
+        zoom_enabled = settings.zoom_enabled,
+        zoom_factor = settings.zoom_factor,
+        use_manual_center = settings.use_manual_center,
+        center_x = settings.center_x,
+        center_y = settings.center_y
+    }
+end
+
+local function set_preset_to_obs_data(preset_table, sd)
+    if preset_table.zone_mode then obs.obs_data_set_string(sd, "zone_mode", preset_table.zone_mode) end
+    if preset_table.left_percent then obs.obs_data_set_double(sd, "left_percent", preset_table.left_percent) end
+    if preset_table.center_percent then obs.obs_data_set_double(sd, "center_percent", preset_table.center_percent) end
+    if preset_table.right_percent then obs.obs_data_set_double(sd, "right_percent", preset_table.right_percent) end
+    if preset_table.z5_left then obs.obs_data_set_double(sd, "z5_left", preset_table.z5_left) end
+    if preset_table.z5_lc then obs.obs_data_set_double(sd, "z5_lc", preset_table.z5_lc) end
+    if preset_table.z5_center then obs.obs_data_set_double(sd, "z5_center", preset_table.z5_center) end
+    if preset_table.z5_rc then obs.obs_data_set_double(sd, "z5_rc", preset_table.z5_rc) end
+    if preset_table.z5_right then obs.obs_data_set_double(sd, "z5_right", preset_table.z5_right) end
+    if preset_table.z7_left then obs.obs_data_set_double(sd, "z7_left", preset_table.z7_left) end
+    if preset_table.z7_lc1 then obs.obs_data_set_double(sd, "z7_lc1", preset_table.z7_lc1) end
+    if preset_table.z7_lc2 then obs.obs_data_set_double(sd, "z7_lc2", preset_table.z7_lc2) end
+    if preset_table.z7_center then obs.obs_data_set_double(sd, "z7_center", preset_table.z7_center) end
+    if preset_table.z7_rc1 then obs.obs_data_set_double(sd, "z7_rc1", preset_table.z7_rc1) end
+    if preset_table.z7_rc2 then obs.obs_data_set_double(sd, "z7_rc2", preset_table.z7_rc2) end
+    if preset_table.z7_right then obs.obs_data_set_double(sd, "z7_right", preset_table.z7_right) end
+    if preset_table.move_x ~= nil then obs.obs_data_set_bool(sd, "move_x", preset_table.move_x) end
+    if preset_table.move_y ~= nil then obs.obs_data_set_bool(sd, "move_y", preset_table.move_y) end
+    if preset_table.offset_x_left then obs.obs_data_set_int(sd, "offset_x_left", preset_table.offset_x_left) end
+    if preset_table.offset_x_right then obs.obs_data_set_int(sd, "offset_x_right", preset_table.offset_x_right) end
+    if preset_table.offset_y_up then obs.obs_data_set_int(sd, "offset_y_up", preset_table.offset_y_up) end
+    if preset_table.offset_y_down then obs.obs_data_set_int(sd, "offset_y_down", preset_table.offset_y_down) end
+    if preset_table.transition_speed then obs.obs_data_set_int(sd, "transition_speed", preset_table.transition_speed) end
+    if preset_table.zoom_enabled ~= nil then obs.obs_data_set_bool(sd, "zoom_enabled", preset_table.zoom_enabled) end
+    if preset_table.zoom_factor then obs.obs_data_set_double(sd, "zoom_factor", preset_table.zoom_factor) end
+    if preset_table.use_manual_center ~= nil then obs.obs_data_set_bool(sd, "use_manual_center", preset_table.use_manual_center) end
+    if preset_table.center_x then obs.obs_data_set_double(sd, "center_x", preset_table.center_x) end
+    if preset_table.center_y then obs.obs_data_set_double(sd, "center_y", preset_table.center_y) end
+end
+
+local function refresh_preset_list(props)
+    local p_list = obs.obs_properties_get(props, "selected_preset")
+    if p_list then
+        obs.obs_property_list_clear(p_list)
+        local presets = load_presets_from_file()
+        for name, _ in pairs(presets) do
+            obs.obs_property_list_add_string(p_list, name, name)
+        end
+    end
+end
+
+local function save_current_as_preset(props, prop)
+    if script_settings == nil then return false end
+    local name = obs.obs_data_get_string(script_settings, "preset_name_input")
+    if name == nil or name == "" then
+        log("No se puede guardar un preset sin nombre.")
+        return false
+    end
+    local presets = load_presets_from_file()
+    presets[name] = get_current_settings_table()
+    if save_presets_to_file(presets) then
+        log("Preset guardado: " .. name)
+        refresh_preset_list(props)
+        obs.obs_data_set_string(script_settings, "preset_name_input", "")
+        return true
+    end
+    return false
+end
+
+local function load_selected_preset(props, prop)
+    if script_settings == nil then return false end
+    local name = obs.obs_data_get_string(script_settings, "selected_preset")
+    if name == nil or name == "" then return false end
+    
+    local presets = load_presets_from_file()
+    if presets[name] then
+        set_preset_to_obs_data(presets[name], script_settings)
+        log("Preset cargado: " .. name)
+        
+        -- Truquito para forzar que el slider callback actualice la visibilidad si cambió de modo
+        -- No podemos llamar update_visibility directamente pues requiere ser definido antes.
+        -- Lo haremos mediante un refresh forzado en la UI general retornando true
+        return true
+    end
+    return false
+end
+
+local function delete_selected_preset(props, prop)
+    if script_settings == nil then return false end
+    local name = obs.obs_data_get_string(script_settings, "selected_preset")
+    if name == nil or name == "" then return false end
+    
+    local presets = load_presets_from_file()
+    if presets[name] then
+        presets[name] = nil
+        if save_presets_to_file(presets) then
+            log("Preset eliminado: " .. name)
+            refresh_preset_list(props)
+            return true
+        end
+    end
+    return false
+end
+
+-- ============================================================================
 -- HOTKEY TOGGLE
 -- ============================================================================
 
@@ -725,7 +912,7 @@ function script_properties()
     -- UI de PRESETS 
     obs.obs_properties_add_text(props, "separator_presets", "--- PRESETS ---", obs.OBS_TEXT_INFO)
     
-    obs.obs_properties_add_text(props, "new_preset_name", "Nombre del Nuevo Preset", obs.OBS_TEXT_DEFAULT)
+    obs.obs_properties_add_text(props, "preset_name_input", "Nombre del Nuevo Preset", obs.OBS_TEXT_DEFAULT)
     local btn_save = obs.obs_properties_add_button(props, "btn_save_preset", "Guardar Preset Actual", save_current_as_preset)
     
     local preset_list = obs.obs_properties_add_list(props, "selected_preset", 
@@ -737,7 +924,7 @@ function script_properties()
     local btn_del = obs.obs_properties_add_button(props, "btn_delete_preset", "Eliminar Preset", delete_selected_preset)
     
     -- Llenar la lista
-    refresh_presets_list(props, preset_list)
+    refresh_preset_list(props)
     
     -- Un truco para refrescar la lista al guardar (OBS llama a modified_callback del botón si devuelve true, pero no es tan directo.
     -- Así que lo enganchamos al text field también si es necesario, pero las funciones btn ya refrescan properties si devuelven true).
