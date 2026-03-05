@@ -95,7 +95,7 @@ local state = {
     hotkey_h_zone = "center",
     hotkey_zone_index = 0,
     hk_z1 = nil, hk_z2 = nil, hk_z3 = nil, hk_z4 = nil, hk_z5 = nil, hk_z6 = nil, hk_z7 = nil,
-    hk_prev = nil, hk_next = nil,
+    hk_center = nil, hk_prev = nil, hk_next = nil,
     animation_progress = 1.0,
     is_animating = false,
 }
@@ -849,6 +849,15 @@ local function hk_z5(pressed) if pressed then set_zone_from_hotkey(5) end end
 local function hk_z6(pressed) if pressed then set_zone_from_hotkey(6) end end
 local function hk_z7(pressed) if pressed then set_zone_from_hotkey(7) end end
 
+local function hk_center(pressed)
+    if pressed and settings.hotkey_movement and state.enabled then
+        local zones = get_active_zones_list()
+        -- The center index is always the ceiling of half the length
+        local center_idx = math.ceil(#zones / 2)
+        set_zone_from_hotkey(center_idx)
+    end
+end
+
 local function hk_prev(pressed)
     if pressed and settings.hotkey_movement and state.enabled then
         local zones = get_active_zones_list()
@@ -1197,6 +1206,8 @@ function script_load(settings_data)
     state.hk_z6 = register_and_load_hotkey(settings_data, "ztm_zona_6", "Zoom To Mouse: Ir a Zona 6", hk_z6)
     state.hk_z7 = register_and_load_hotkey(settings_data, "ztm_zona_7", "Zoom To Mouse: Ir a Zona 7", hk_z7)
     
+    state.hk_center = register_and_load_hotkey(settings_data, "ztm_zona_center", "Zoom To Mouse: Ir al Centro Exacto", hk_center)
+    
     state.hk_prev = register_and_load_hotkey(settings_data, "ztm_zona_prev", "Zoom To Mouse: Retroceder Zona Anterior", hk_prev)
     state.hk_next = register_and_load_hotkey(settings_data, "ztm_zona_next", "Zoom To Mouse: Avanzar a Siguiente Zona", hk_next)
     
@@ -1218,6 +1229,7 @@ function script_save(settings_data)
     save_hotkey(settings_data, "ztm_zona_5", state.hk_z5)
     save_hotkey(settings_data, "ztm_zona_6", state.hk_z6)
     save_hotkey(settings_data, "ztm_zona_7", state.hk_z7)
+    save_hotkey(settings_data, "ztm_zona_center", state.hk_center)
     save_hotkey(settings_data, "ztm_zona_prev", state.hk_prev)
     save_hotkey(settings_data, "ztm_zona_next", state.hk_next)
 end
