@@ -31,6 +31,7 @@ local settings = {
     debug_enabled = true,
     source_name = "",
     zone_mode = "3zones",       -- "3zones", "5zones", "7zones", o "6zones"
+    hotkey_movement = false,
     
     -- 3 Zonas
     left_percent = 33.33,
@@ -91,6 +92,10 @@ local state = {
     target_pos = { x = 0, y = 0 },
     target_scale = { x = 1, y = 1 },
     current_zone = { h = "center", v = "center" },
+    hotkey_h_zone = "center",
+    hotkey_zone_index = 0,
+    hk_z1 = nil, hk_z2 = nil, hk_z3 = nil, hk_z4 = nil, hk_z5 = nil, hk_z6 = nil, hk_z7 = nil,
+    hk_prev = nil, hk_next = nil,
     animation_progress = 1.0,
     is_animating = false,
 }
@@ -546,8 +551,28 @@ local FRAME_TIME = 16
 local function animation_tick()
     if not state.enabled then return end
     
-    local mouse_pos = get_mouse_pos()
-    local new_zone = get_current_zone(mouse_pos)
+    local mouse_pos = { x = 0, y = 0 }
+    local new_zone = { h = "center", v = "center" }
+    
+    if settings.hotkey_movement then
+        local zones = {}
+        if settings.zone_mode == "7zones" then
+            zones = {"left", "left_center1", "left_center2", "center", "right_center1", "right_center2", "right"}
+        elseif settings.zone_mode == "5zones" then
+            zones = {"left", "left_center", "center", "right_center", "right"}
+        else
+            zones = {"left", "center", "right"}
+        end
+        
+        if state.hotkey_zone_index == 0 or state.hotkey_zone_index > #zones then
+            state.hotkey_zone_index = math.ceil(#zones / 2)
+        end
+        state.hotkey_h_zone = zones[state.hotkey_zone_index]
+        new_zone.h = state.hotkey_h_zone
+    else
+        mouse_pos = get_mouse_pos()
+        new_zone = get_current_zone(mouse_pos)
+    end
     
     if new_zone.h ~= state.current_zone.h or new_zone.v ~= state.current_zone.v then
         state.start_pos.x, state.start_pos.y = state.current_pos.x, state.current_pos.y
@@ -692,7 +717,8 @@ local function get_current_settings_table()
         zoom_factor = settings.zoom_factor,
         use_manual_center = settings.use_manual_center,
         center_x = settings.center_x,
-        center_y = settings.center_y
+        center_y = settings.center_y,
+        hotkey_movement = settings.hotkey_movement
     }
 end
 
@@ -725,6 +751,7 @@ local function set_preset_to_obs_data(preset_table, sd)
     if preset_table.use_manual_center ~= nil then obs.obs_data_set_bool(sd, "use_manual_center", preset_table.use_manual_center) end
     if preset_table.center_x then obs.obs_data_set_double(sd, "center_x", preset_table.center_x) end
     if preset_table.center_y then obs.obs_data_set_double(sd, "center_y", preset_table.center_y) end
+    if preset_table.hotkey_movement ~= nil then obs.obs_data_set_bool(sd, "hotkey_movement", preset_table.hotkey_movement) end
 end
 
 local function refresh_preset_list(props)
@@ -794,6 +821,51 @@ end
 -- ============================================================================
 -- HOTKEY TOGGLE
 -- ============================================================================
+
+local function get_active_zones_list()
+    if settings.zone_mode == "7zones" then
+        return {"left", "left_center1", "left_center2", "center", "right_center1", "right_center2", "right"}
+    elseif settings.zone_mode == "5zones" then
+        return {"left", "left_center", "center", "right_center", "right"}
+    else -- 3zones and 6zones
+        return {"left", "center", "right"}
+    end
+end
+
+local function set_zone_from_hotkey(index)
+    if not settings.hotkey_movement or not state.enabled then return end
+    local zones = get_active_zones_list()
+    if index >= 1 and index <= #zones then
+        state.hotkey_zone_index = index
+        state.hotkey_h_zone = zones[index]
+    end
+end
+
+local function hk_z1(pressed) if pressed then set_zone_from_hotkey(1) end end
+local function hk_z2(pressed) if pressed then set_zone_from_hotkey(2) end end
+local function hk_z3(pressed) if pressed then set_zone_from_hotkey(3) end end
+local function hk_z4(pressed) if pressed then set_zone_from_hotkey(4) end end
+local function hk_z5(pressed) if pressed then set_zone_from_hotkey(5) end end
+local function hk_z6(pressed) if pressed then set_zone_from_hotkey(6) end end
+local function hk_z7(pressed) if pressed then set_zone_from_hotkey(7) end end
+
+local function hk_prev(pressed)
+    if pressed and settings.hotkey_movement and state.enabled then
+        local zones = get_active_zones_list()
+        if state.hotkey_zone_index > 1 then
+            set_zone_from_hotkey(state.hotkey_zone_index - 1)
+        end
+    end
+end
+
+local function hk_next(pressed)
+    if pressed and settings.hotkey_movement and state.enabled then
+        local zones = get_active_zones_list()
+        if state.hotkey_zone_index < #zones then
+            set_zone_from_hotkey(state.hotkey_zone_index + 1)
+        end
+    end
+end
 
 local function toggle_enabled(pressed)
     if not pressed then return end
@@ -938,6 +1010,8 @@ function script_properties()
     
     obs.obs_properties_add_text(props, "separator_settings", "--- CONFIGURACIÓN ---", obs.OBS_TEXT_INFO)
 
+    obs.obs_properties_add_bool(props, "hotkey_movement", "Activar movimiento por atajos de teclado (ignorar ratón)")
+
     obs.obs_properties_add_int(props, "screen_width", "Ancho de pantalla", 640, 7680, 1)
     obs.obs_properties_add_int(props, "screen_height", "Alto de pantalla", 480, 4320, 1)
     
@@ -1006,6 +1080,7 @@ end
 function script_defaults(settings_data)
     obs.obs_data_set_default_bool(settings_data, "debug_enabled", true)
     obs.obs_data_set_default_string(settings_data, "source_name", "")
+    obs.obs_data_set_default_bool(settings_data, "hotkey_movement", false)
     obs.obs_data_set_default_int(settings_data, "screen_width", 1920)
     obs.obs_data_set_default_int(settings_data, "screen_height", 1080)
     obs.obs_data_set_default_string(settings_data, "zone_mode", "3zones")
@@ -1049,6 +1124,7 @@ end
 function script_update(settings_data)
     settings.debug_enabled = obs.obs_data_get_bool(settings_data, "debug_enabled")
     settings.source_name = obs.obs_data_get_string(settings_data, "source_name")
+    settings.hotkey_movement = obs.obs_data_get_bool(settings_data, "hotkey_movement")
     settings.screen_width = obs.obs_data_get_int(settings_data, "screen_width")
     settings.screen_height = obs.obs_data_get_int(settings_data, "screen_height")
     settings.zone_mode = obs.obs_data_get_string(settings_data, "zone_mode")
@@ -1102,22 +1178,48 @@ function script_description()
 ]]
 end
 
+local function register_and_load_hotkey(sd, id, desc, cb_func)
+    local hk_id = obs.obs_hotkey_register_frontend(id, desc, cb_func)
+    local arr = obs.obs_data_get_array(sd, id)
+    obs.obs_hotkey_load(hk_id, arr)
+    obs.obs_data_array_release(arr)
+    return hk_id
+end
+
 function script_load(settings_data)
-    state.hotkey_id = obs.obs_hotkey_register_frontend("zoom_to_mouse_toggle", 
-        "Zoom To Mouse Toggle", 
-        toggle_enabled)
+    state.hotkey_id = register_and_load_hotkey(settings_data, "zoom_to_mouse_toggle", "Zoom To Mouse Toggle", toggle_enabled)
     
-    local hotkey_save_array = obs.obs_data_get_array(settings_data, "zoom_to_mouse_toggle")
-    obs.obs_hotkey_load(state.hotkey_id, hotkey_save_array)
-    obs.obs_data_array_release(hotkey_save_array)
+    state.hk_z1 = register_and_load_hotkey(settings_data, "ztm_zona_1", "Zoom To Mouse: Ir a Zona 1", hk_z1)
+    state.hk_z2 = register_and_load_hotkey(settings_data, "ztm_zona_2", "Zoom To Mouse: Ir a Zona 2", hk_z2)
+    state.hk_z3 = register_and_load_hotkey(settings_data, "ztm_zona_3", "Zoom To Mouse: Ir a Zona 3", hk_z3)
+    state.hk_z4 = register_and_load_hotkey(settings_data, "ztm_zona_4", "Zoom To Mouse: Ir a Zona 4", hk_z4)
+    state.hk_z5 = register_and_load_hotkey(settings_data, "ztm_zona_5", "Zoom To Mouse: Ir a Zona 5", hk_z5)
+    state.hk_z6 = register_and_load_hotkey(settings_data, "ztm_zona_6", "Zoom To Mouse: Ir a Zona 6", hk_z6)
+    state.hk_z7 = register_and_load_hotkey(settings_data, "ztm_zona_7", "Zoom To Mouse: Ir a Zona 7", hk_z7)
+    
+    state.hk_prev = register_and_load_hotkey(settings_data, "ztm_zona_prev", "Zoom To Mouse: Retroceder Zona Anterior", hk_prev)
+    state.hk_next = register_and_load_hotkey(settings_data, "ztm_zona_next", "Zoom To Mouse: Avanzar a Siguiente Zona", hk_next)
     
     log("Script cargado correctamente")
 end
 
+local function save_hotkey(sd, id, hk_id)
+    local arr = obs.obs_hotkey_save(hk_id)
+    obs.obs_data_set_array(sd, id, arr)
+    obs.obs_data_array_release(arr)
+end
+
 function script_save(settings_data)
-    local hotkey_save_array = obs.obs_hotkey_save(state.hotkey_id)
-    obs.obs_data_set_array(settings_data, "zoom_to_mouse_toggle", hotkey_save_array)
-    obs.obs_data_array_release(hotkey_save_array)
+    save_hotkey(settings_data, "zoom_to_mouse_toggle", state.hotkey_id)
+    save_hotkey(settings_data, "ztm_zona_1", state.hk_z1)
+    save_hotkey(settings_data, "ztm_zona_2", state.hk_z2)
+    save_hotkey(settings_data, "ztm_zona_3", state.hk_z3)
+    save_hotkey(settings_data, "ztm_zona_4", state.hk_z4)
+    save_hotkey(settings_data, "ztm_zona_5", state.hk_z5)
+    save_hotkey(settings_data, "ztm_zona_6", state.hk_z6)
+    save_hotkey(settings_data, "ztm_zona_7", state.hk_z7)
+    save_hotkey(settings_data, "ztm_zona_prev", state.hk_prev)
+    save_hotkey(settings_data, "ztm_zona_next", state.hk_next)
 end
 
 function script_unload()
